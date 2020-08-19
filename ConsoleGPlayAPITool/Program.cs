@@ -14,7 +14,7 @@ namespace ConsoleGPlayAPITool
         static void Main(string[] args)
         {
             var configFilePath = args[0];
-            Console.WriteLine($"Loading Config File from path{ configFilePath}");
+            Console.WriteLine($"Loading Config File from path {configFilePath}");
 
             BundleSettings configs = BundleSettings.FromFilePath(configFilePath);
 
@@ -61,14 +61,12 @@ namespace ConsoleGPlayAPITool
 
             if (result.Exception != null)
             {
-                Console.WriteLine("Error: " + result.Exception.Message);
-                return;
+                throw new Exception(result.Exception.Message);
             }
 
             if (result.Status != UploadStatus.Completed)
             {
-                Console.WriteLine("File upload failed.");
-                return;
+                throw new Exception("File upload failed. Reason: unknown :(");
             }
 
             Console.WriteLine("File uploaded, bytes sent: " + result.BytesSent);
@@ -92,8 +90,7 @@ namespace ConsoleGPlayAPITool
                 {
                     if (response == null)
                     {
-                        Console.WriteLine("Failed Upload " + obbPath);
-                        throw new Exception("Failed uploading obb");
+                        throw new Exception("Failed Upload " + obbPath);
                     }
                     else
                     {
@@ -126,6 +123,7 @@ namespace ConsoleGPlayAPITool
         private static bool CheckIfNeedProcessObb(BundleSettings configs, out string[] f)
         {
             var apkFolder = Directory.GetParent(configs.ApkPath);
+            Console.WriteLine($"Trying find obb on Path: {apkFolder}");
             var boolNeedProcessObb = false;
             var tempList = new List<string>();
 
