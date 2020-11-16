@@ -17,11 +17,11 @@ namespace ConsoleGPlayAPITool
         public string RecentChangesLang => GetValue("umake.android.recentchangeslang");
         public string TrackBranch => GetValue("umake.android.trackbranch");
         public string ReleaseName => GetValue("umake.android.releasename");
-        public int UserFraction
+        public double UserFraction
         {
             get
             {
-                int.TryParse(GetValue("umake.android.userfraction"), out int num);
+                double.TryParse(GetValue("umake.android.userfraction"), out double num);
                 return num;
             }
         }

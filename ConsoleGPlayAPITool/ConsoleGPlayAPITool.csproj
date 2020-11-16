@@ -9,4 +9,8 @@
       <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.48.0.2044" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Remove="Config.txt" />
+    </ItemGroup>
+
 </Project>

@@ -159,10 +159,18 @@ namespace ConsoleGPlayAPITool
                 Status = configs.TrackStatus,
                 VersionCodes = apkVersionCodes,
             };
-            if (configs.TrackStatus != "completed")
-                release.UserFraction = configs.UserFraction;
-            track.Releases.Add(release);
 
+            if (configs.TrackStatus == "completed")
+            {
+                track.Releases.Clear();
+            }
+            else 
+            {
+                release.UserFraction = configs.UserFraction;
+            }
+            track.Releases.Add(release);
+            
+            
             //var completedStatus = "inProgress";
             // var haltedStatus = "halted";
             // if (configs.TrackStatus == completedStatus)
