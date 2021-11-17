@@ -17,47 +17,22 @@ namespace ConsoleGPlayAPITool
             Console.WriteLine($"Loading Config File from path {configFilePath}");
 
             BundleSettings configs = BundleSettings.FromFilePath(configFilePath);
-
-
+            
             if (configs == null)
             {
                 throw new Exception("Cannot load a valid BundleConfig");
             }
-
-            //Verify if exist any obb
-            var needUploadExtensionsFiles = CheckIfNeedProcessObb(configs, out string[] obbs);
-
+            
             //Create publisherService
             var androidPublisherService = CreateGoogleConsoleAPIService(configs);
 
             // Create a new edit to make changes to your listing.
-            var edit = CreateAnEditForApk(androidPublisherService, configs);
+            var edit = CreateAnEditObject(androidPublisherService, configs);
+            
+            var uploadAab = configs.ApkPath.Trim().EndsWith(".aab");
 
-            // Upload new apk to developer console
-            var upload = UploadApkFile(configs, androidPublisherService, edit);
-
-            upload.ResponseReceived += (apk) =>
-            {
-                if (apk == null)
-                    return;
-                var track = LoadTrackBranch(androidPublisherService, configs, edit);
-
-                UpdateTrackInformation(apk, track, configs);
-
-                if (needUploadExtensionsFiles)
-                {
-                    UploadObbFiles(androidPublisherService, edit, apk, configs, obbs);
-                }
-           
-                var updatedTrack = androidPublisherService.Edits.Tracks
-                    .Update(track, configs.PackageName, edit.Id, track.TrackValue).Execute();
-                Console.WriteLine("Track " + updatedTrack.TrackValue + " has been updated.");
-
-                CommitChangesToGooglePlay(androidPublisherService, configs, edit);
-            };
-            var result = upload.Upload();
-
-       
+            var result = uploadAab ? CreateUploadAabFileObject(configs, androidPublisherService, edit).Upload() : 
+                CreateUploadApkFileObject(configs, androidPublisherService, edit).Upload();
 
             if (result.Exception != null)
             {
@@ -72,7 +47,7 @@ namespace ConsoleGPlayAPITool
             Console.WriteLine("File uploaded, bytes sent: " + result.BytesSent);
         }
 
-        private static void UploadObbFiles(AndroidPublisherService service, AppEdit edit, Apk apk,
+        private static void UploadObbFilesOnApk(AndroidPublisherService service, AppEdit edit, Apk apk,
             BundleSettings configs, string[] obbs)
         {
             foreach (var obbPath in obbs)
@@ -101,6 +76,45 @@ namespace ConsoleGPlayAPITool
                 if (result.Exception != null)
                 {
                      throw new Exception("Error: " + result.Exception.Message);
+                }
+
+                if (result.Status != UploadStatus.Completed)
+                {
+                    throw new Exception("Obb not uploaded");
+                }
+                Console.WriteLine($"Finish Uploading Obb:{obbPath}");
+            }
+        }
+        
+        private static void UploadObbFiles(AndroidPublisherService service, AppEdit edit, Nullable<int> versionCode,
+            BundleSettings configs, string[] obbs)
+        {
+            foreach (var obbPath in obbs)
+            {
+                var upload = service.Edits.Expansionfiles.Upload(
+                    configs.PackageName,
+                    edit.Id,
+                    versionCode.Value,
+                    EditsResource.ExpansionfilesResource.UploadMediaUpload.ExpansionFileTypeEnum.Main,
+                    new FileStream(obbPath, FileMode.Open),
+                    "application/octet-stream"
+                );
+                Console.WriteLine($"Starting Uploading Obb:{obbPath}");
+                upload.ResponseReceived += response =>
+                {
+                    if (response == null)
+                    {
+                        throw new Exception("Failed Upload " + obbPath);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Success Upload " + obbPath);
+                    }
+                };
+                var result = upload.Upload();
+                if (result.Exception != null)
+                {
+                    throw new Exception("Error: " + result.Exception.Message);
                 }
 
                 if (result.Status != UploadStatus.Completed)
@@ -142,9 +156,9 @@ namespace ConsoleGPlayAPITool
             return boolNeedProcessObb;
         }
 
-        private static void UpdateTrackInformation(Apk apk, Track track, BundleSettings configs)
+        private static void UpdateTrackInformation(Nullable<int> versionCode, Track track, BundleSettings configs)
         {
-            var apkVersionCodes = new List<long?> {apk.VersionCode};
+            var apkVersionCodes = new List<long?> {versionCode};
             var release = new TrackRelease
             {
                 Name = configs.ReleaseName,
@@ -196,6 +210,61 @@ namespace ConsoleGPlayAPITool
             Console.WriteLine($"Load TrackBranch:{track.TrackValue}");
             return track;
         }
+        
+        private static EditsResource.ApksResource.UploadMediaUpload CreateUploadApkFileObject(BundleSettings configs, AndroidPublisherService androidPublisherService, AppEdit edit)
+        {
+            var upload = UploadApkFile(configs, androidPublisherService, edit);
+            
+            //Verify if exist any obb
+            var needUploadExtensionsFiles = CheckIfNeedProcessObb(configs, out string[] obbs);
+            
+            upload.ResponseReceived += (apk) =>
+            {
+                if (apk == null)
+                    return;
+                var track = LoadTrackBranch(androidPublisherService, configs, edit);
+
+                UpdateTrackInformation(apk.VersionCode, track, configs);
+
+                if (needUploadExtensionsFiles)
+                    UploadObbFiles(androidPublisherService, edit, apk.VersionCode, configs, obbs);
+
+                var updatedTrack = androidPublisherService.Edits.Tracks
+                    .Update(track, configs.PackageName, edit.Id, track.TrackValue).Execute();
+                Console.WriteLine("Track " + updatedTrack.TrackValue + " has been updated.");
+
+                CommitChangesToGooglePlay(androidPublisherService, configs, edit);
+            };
+
+            return upload;
+        }
+        
+        private static EditsResource.BundlesResource.UploadMediaUpload CreateUploadAabFileObject(BundleSettings configs, AndroidPublisherService androidPublisherService, AppEdit edit)
+        {
+            var upload = UploadAabFile(configs, androidPublisherService, edit);
+            
+            //Verify if exist any obb
+            var needUploadExtensionsFiles = CheckIfNeedProcessObb(configs, out string[] obbs);
+            upload.ResponseReceived += (aab) =>
+            {
+                if (aab == null)
+                    return;
+                var track = LoadTrackBranch(androidPublisherService, configs, edit);
+
+                UpdateTrackInformation(aab.VersionCode, track, configs);
+
+                if (needUploadExtensionsFiles)
+                    UploadObbFiles(androidPublisherService, edit, aab.VersionCode, configs, obbs);
+
+                var updatedTrack = androidPublisherService.Edits.Tracks
+                    .Update(track, configs.PackageName, edit.Id, track.TrackValue).Execute();
+                Console.WriteLine("Track " + updatedTrack.TrackValue + " has been updated.");
+
+                CommitChangesToGooglePlay(androidPublisherService, configs, edit);
+            };
+
+            return upload;
+        }
 
         private static EditsResource.ApksResource.UploadMediaUpload UploadApkFile(BundleSettings configs,
             AndroidPublisherService androidPublisherService,
@@ -206,12 +275,26 @@ namespace ConsoleGPlayAPITool
                 configs.PackageName,
                 edit.Id,
                 new FileStream(configs.ApkPath, FileMode.Open),
-                "application/vnd.android.package-archive"
+                "application/octet-stream"
+            );
+            return upload;
+        }
+        
+        private static EditsResource.BundlesResource.UploadMediaUpload UploadAabFile(BundleSettings configs,
+            AndroidPublisherService androidPublisherService,
+            AppEdit edit)
+        {
+            Console.WriteLine("Upload started for aab: " + Path.GetFileName(configs.ApkPath));
+            var upload = androidPublisherService.Edits.Bundles.Upload(
+                configs.PackageName,
+                edit.Id,
+                new FileStream(configs.ApkPath, FileMode.Open),
+                "application/octet-stream"
             );
             return upload;
         }
 
-        private static AppEdit CreateAnEditForApk(AndroidPublisherService androidPublisherService,
+        private static AppEdit CreateAnEditObject(AndroidPublisherService androidPublisherService,
             BundleSettings configs)
         {
             var edit = androidPublisherService.Edits
