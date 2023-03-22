@@ -315,7 +315,7 @@ namespace ConsoleGPlayAPITool
             var androidPublisherService = new AndroidPublisherService(new BaseClientService.Initializer
                 {HttpClientInitializer = cred});
             
-            androidPublisherService.HttpClient.Timeout = TimeSpan.FromMinutes(10);
+            androidPublisherService.HttpClient.Timeout = TimeSpan.FromMinutes(30);
             return androidPublisherService;
         }
     }
