@@ -29,6 +29,7 @@ namespace ConsoleGPlayAPITool
             // Create a new edit to make changes to your listing.
             var edit = CreateAnEditObject(androidPublisherService, configs);
             
+            
             var uploadAab = configs.ApkPath.Trim().EndsWith(".aab");
 
             var result = uploadAab ? CreateUploadAabFileObject(configs, androidPublisherService, edit).Upload() : 
@@ -124,6 +125,46 @@ namespace ConsoleGPlayAPITool
                 Console.WriteLine($"Finish Uploading Obb:{obbPath}");
             }
         }
+        
+        private static void UploadSymbolZipFile(AndroidPublisherService service, AppEdit edit, Nullable<int> versionCode,
+            BundleSettings configs, string symbolsZipPath)
+        {
+            var upload = service.Edits.Deobfuscationfiles.Upload(
+                configs.PackageName,
+                edit.Id,
+                versionCode.Value,
+                EditsResource.DeobfuscationfilesResource.UploadMediaUpload.DeobfuscationFileTypeEnum.NativeCode,
+                new FileStream(symbolsZipPath, FileMode.Open),
+                "application/octet-stream"
+            );
+            
+            Console.WriteLine($"Starting Uploading Symbols: {symbolsZipPath}");
+            upload.ResponseReceived += response =>
+            {
+                if (response == null)
+                {
+                    throw new Exception("Failed Upload " + symbolsZipPath);
+                }
+                else
+                {
+                    Console.WriteLine("Success Upload " + symbolsZipPath);
+                }
+            };
+            var result = upload.Upload();
+            if (result.Exception != null)
+            {
+                throw new Exception("Error: " + result.Exception.Message);
+            }
+
+            if (result.Status != UploadStatus.Completed)
+            {
+                throw new Exception("Symbols not uploaded");
+            }
+            
+            Console.WriteLine($"Finish Uploading Symbols:{symbolsZipPath}");
+            
+        }
+
 
         private static void CommitChangesToGooglePlay(AndroidPublisherService androidPublisherService,
             BundleSettings configs,
@@ -154,6 +195,30 @@ namespace ConsoleGPlayAPITool
             f = tempList.ToArray();
             Console.WriteLine($"Need Upload Obb:{boolNeedProcessObb}");
             return boolNeedProcessObb;
+        }
+        
+        private static bool CheckIfNeedProcessSymbols(BundleSettings configs, out string symbolsZipPath)
+        {
+            symbolsZipPath = string.Empty;
+            var apkFolder = Directory.GetParent(configs.ApkPath);
+            Console.WriteLine($"Trying find symbols on Path: {apkFolder}");
+
+            var boolNeedProcessSymbols = false;
+            
+            var files = apkFolder.GetFiles("*.symbols.zip");
+            if (files.Length <= 0)
+                Console.WriteLine($"Can't find symbols file.");
+            else if (files.Length > 1)
+                Console.WriteLine($"There are more than 1 symbols file on folder.");
+            else
+            {
+                Console.WriteLine($"Founded symbols file.");
+                boolNeedProcessSymbols = true;
+                symbolsZipPath = files[0].FullName;
+            }
+
+            Console.WriteLine($"Need Upload Symbols:{boolNeedProcessSymbols}");
+            return boolNeedProcessSymbols;
         }
 
         private static void UpdateTrackInformation(Nullable<int> versionCode, Track track, BundleSettings configs)
@@ -217,7 +282,8 @@ namespace ConsoleGPlayAPITool
             
             //Verify if exist any obb
             var needUploadExtensionsFiles = CheckIfNeedProcessObb(configs, out string[] obbs);
-            
+            //Verify if exist android symbols.zip
+            var checkIfNeedProcessSymbols = CheckIfNeedProcessSymbols(configs, out string symbolsZipPath);
             upload.ResponseReceived += (apk) =>
             {
                 if (apk == null)
@@ -229,6 +295,9 @@ namespace ConsoleGPlayAPITool
                 if (needUploadExtensionsFiles)
                     UploadObbFiles(androidPublisherService, edit, apk.VersionCode, configs, obbs);
 
+                if (checkIfNeedProcessSymbols)
+                    UploadSymbolZipFile(androidPublisherService, edit, apk.VersionCode, configs, symbolsZipPath);
+                
                 var updatedTrack = androidPublisherService.Edits.Tracks
                     .Update(track, configs.PackageName, edit.Id, track.TrackValue).Execute();
                 Console.WriteLine("Track " + updatedTrack.TrackValue + " has been updated.");
@@ -245,6 +314,8 @@ namespace ConsoleGPlayAPITool
             
             //Verify if exist any obb
             var needUploadExtensionsFiles = CheckIfNeedProcessObb(configs, out string[] obbs);
+            //Verify if exist android symbols.zip
+            var checkIfNeedProcessSymbols = CheckIfNeedProcessSymbols(configs, out string symbolsZipPath);
             upload.ResponseReceived += (aab) =>
             {
                 if (aab == null)
@@ -256,6 +327,9 @@ namespace ConsoleGPlayAPITool
                 if (needUploadExtensionsFiles)
                     UploadObbFiles(androidPublisherService, edit, aab.VersionCode, configs, obbs);
 
+                if (checkIfNeedProcessSymbols)
+                    UploadSymbolZipFile(androidPublisherService, edit, aab.VersionCode, configs, symbolsZipPath);
+                
                 var updatedTrack = androidPublisherService.Edits.Tracks
                     .Update(track, configs.PackageName, edit.Id, track.TrackValue).Execute();
                 Console.WriteLine("Track " + updatedTrack.TrackValue + " has been updated.");
@@ -284,6 +358,7 @@ namespace ConsoleGPlayAPITool
             AndroidPublisherService androidPublisherService,
             AppEdit edit)
         {
+            
             Console.WriteLine("Upload started for aab: " + Path.GetFileName(configs.ApkPath));
             var upload = androidPublisherService.Edits.Bundles.Upload(
                 configs.PackageName,
