@@ -171,6 +171,7 @@ namespace ConsoleGPlayAPITool
             AppEdit edit)
         {
             var commitRequest = androidPublisherService.Edits.Commit(configs.PackageName, edit.Id);
+            commitRequest.ChangesNotSentForReview = true;
             var appEdit = commitRequest.Execute();
             Console.WriteLine("App edit with id " + appEdit.Id + " has been comitted");
         }
